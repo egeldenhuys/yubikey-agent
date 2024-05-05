@@ -43,15 +43,7 @@ func init() {
 }
 
 func connectForSetup() *piv.YubiKey {
-	cards, err := piv.Cards()
-	if err != nil {
-		log.Fatalln("Failed to enumerate tokens:", err)
-	}
-	if len(cards) == 0 {
-		log.Fatalln("No YubiKeys detected!")
-	}
-	// TODO: support multiple YubiKeys.
-	yk, err := piv.Open(cards[0])
+	yk, err := openYK()
 	if err != nil {
 		log.Fatalln("Failed to connect to the YubiKey:", err)
 	}
@@ -59,6 +51,15 @@ func connectForSetup() *piv.YubiKey {
 }
 
 func runReset(yk *piv.YubiKey) {
+	fmt.Print(`Do you want to reset the PIV applet? This will delete all PIV keys. Type "delete": `)
+	var res string
+	if _, err := fmt.Scanln(&res); err != nil {
+		log.Fatalln("Failed to read response:", err)
+	}
+	if res != "delete" {
+		log.Fatalln("Aborting...")
+	}
+
 	fmt.Println("Resetting YubiKey PIV applet...")
 	if err := yk.Reset(); err != nil {
 		log.Fatalln("Failed to reset YubiKey:", err)
@@ -84,8 +85,8 @@ func runSetup(yk *piv.YubiKey) {
 	if err != nil {
 		log.Fatalln("Failed to read PIN:", err)
 	}
-	if len(pin) == 0 || len(pin) > 8 {
-		log.Fatalln("The PIN needs to be 1-8 characters.")
+	if len(pin) < 6 || len(pin) > 8 {
+		log.Fatalln("The PIN needs to be 6-8 characters.")
 	}
 	fmt.Print("Repeat PIN/PUK: ")
 	repeat, err := term.ReadPassword(int(os.Stdin.Fd()))

@@ -160,16 +160,21 @@ func (a *Agent) ensureYK() error {
 	return nil
 }
 
+func (a *Agent) maybeReleaseYK() {
+	// On macOS, YubiKey 5s persist the PIN cache even across sessions (and even
+	// processes), so we can release the lock on the key, to let other
+	// applications like age-plugin-yubikey use it.
+	if runtime.GOOS != "darwin" || a.yk.Version().Major < 5 {
+		return
+	}
+	if err := a.yk.Close(); err != nil {
+		log.Println("Failed to automatically release YubiKey lock:", err)
+	}
+	a.yk = nil
+}
+
 func (a *Agent) connectToYK() (*piv.YubiKey, error) {
-	cards, err := piv.Cards()
-	if err != nil {
-		return nil, err
-	}
-	if len(cards) == 0 {
-		return nil, errors.New("no YubiKey detected")
-	}
-	// TODO: support multiple YubiKeys.
-	yk, err := piv.Open(cards[0])
+	yk, err := openYK()
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +182,25 @@ func (a *Agent) connectToYK() (*piv.YubiKey, error) {
 	// requires switching application, which drops the PIN cache.
 	a.serial, _ = yk.Serial()
 	return yk, nil
+}
+
+func openYK() (yk *piv.YubiKey, err error) {
+	cards, err := piv.Cards()
+	if err != nil {
+		return nil, err
+	}
+	if len(cards) == 0 {
+		return nil, errors.New("no YubiKey detected")
+	}
+	// TODO: support multiple YubiKeys. For now, select the first one that opens
+	// successfully, to skip any internal unused smart card readers.
+	for _, card := range cards {
+		yk, err = piv.Open(card)
+		if err == nil {
+			return
+		}
+	}
+	return
 }
 
 func (a *Agent) Close() error {
@@ -205,6 +229,7 @@ func (a *Agent) List() ([]*agent.Key, error) {
 	if err := a.ensureYK(); err != nil {
 		return nil, fmt.Errorf("could not reach YubiKey: %w", err)
 	}
+	defer a.maybeReleaseYK()
 
 	pk, err := getPublicKey(a.yk, piv.SlotAuthentication)
 	if err != nil {
@@ -241,6 +266,7 @@ func (a *Agent) Signers() ([]ssh.Signer, error) {
 	if err := a.ensureYK(); err != nil {
 		return nil, fmt.Errorf("could not reach YubiKey: %w", err)
 	}
+	defer a.maybeReleaseYK()
 
 	return a.signers()
 }
@@ -275,6 +301,7 @@ func (a *Agent) SignWithFlags(key ssh.PublicKey, data []byte, flags agent.Signat
 	if err := a.ensureYK(); err != nil {
 		return nil, fmt.Errorf("could not reach YubiKey: %w", err)
 	}
+	defer a.maybeReleaseYK()
 
 	signers, err := a.signers()
 	if err != nil {
