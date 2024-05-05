@@ -1,6 +1,6 @@
-FROM golang:1.18
+FROM golang:1.22
 
-WORKDIR /usr/src/app
+WORKDIR /source
 
 RUN apt-get update && apt-get install -y \
   libpcsclite-dev \

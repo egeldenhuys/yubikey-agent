@@ -1,0 +1,5 @@
+# go cache when building with container
+.cache/
+
+# Compiled binary from container
+yubikey-agent
