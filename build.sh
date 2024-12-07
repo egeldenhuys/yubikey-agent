@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # TODO(evert): detect if docker or podman is installed
 container_agent=podman
 
